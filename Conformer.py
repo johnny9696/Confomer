@@ -3,6 +3,7 @@ from tkinter import E
 import torch
 import torch.nn as nn
 import torch import Tensor
+import attention.MHSA as MHSA
 
 class Swish(nn.Module):
     def __init__(self):
@@ -68,22 +69,18 @@ class Feed_forward_module(nn.Module):
         x=self.dropout(x)
         return x
 
-class Position_encoding(nn.Module):
-    def __init__(self,d_model=512,max_len=10000):
-        """
-        even  position : sin(pos/power(10000,2i/d_model))
-        odd position : cos(pos/power(100000,2i/d_model))
-        """
-
-    def forward(self):
-
-class  MHSA(nn.Module):
+class  MHSA_module(nn.Module):
     def __init__(self,
-    dropout_p):
+    dropout_p,
+    d_model,
+    num_head):
         self.Layer_norm=nn.LayerNorm()
         self.dropout=nn.Dropout(p=dropout_p)
-        self.position_encoding=Position_encoding()
+        self.MHSA=MHSA(d_model, num_head)
     def forward(self,x):
+        x=self.Layer_norm(x)
+        x=self.MHSA(x)
+        x=self.dropout(x)
         return x
 
 class convolution_subsampling(nn.Module):
@@ -117,7 +114,7 @@ class Conformer_block(nn.Module):
     expansion_factor,
     hidden_channels):
         self.feed_forward = Feed_forward_module(hidden_channels=hidden_channels,expansion_factor=expansion_factor,dropout_p=dropout_p)
-        self.MHSA = MHSA()
+        self.MHSA = MHSA_module()
         self.convolution = Convolution_module()
         self.Layernorm = nn.Layernorm()
 
