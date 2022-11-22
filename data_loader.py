@@ -2,7 +2,8 @@ import random
 import torch
 import librosa
 from librosa import stft, istft
-from librosa.feature import melspectrogram as melspectorgram
+from librosa.feature import melspectrogram
+from librosa.filters import mel
 import numpy as np
 import torch.utils.data
 import util
@@ -23,9 +24,8 @@ class MelLangLoader(torch.utils.data.Dataset):
     def get_mel_lang_pair(self,audio_lang_list):
         audio_lang_list=audio_lang_list.split('|')
         audio,text=audio_lang_list[0],audio_lang_list[2]
-        print(audio, text)
         audio=self.get_mel(audio)
-        text=self.get_text(text)
+        text=self.get_lang(text)
         return (audio,text)
 
     def get_mel(self,audio_path):
@@ -36,15 +36,19 @@ class MelLangLoader(torch.utils.data.Dataset):
         audio= stft(audio,n_fft=int(self.hps.dataset.filter_length),
         hop_length=int(self.hps.dataset.hop_length), win_length=int(self.hps.dataset.win_length),
         window=self.hps.dataset.window)
+        mel_filter=mel(sr=sr,n_fft=int(self.hps.dataset.filter_length), fmin=float(self.hps.dataset.f_min),fmax=float(self.hps.dataset.f_max), n_mels=int(self.hps.dataset.n_mels))
+        audio=mel_filter.dot(audio)
+        """
         audio=melspectorgram(audio, sr=sr,n_fft=int(self.hps.dataset.filter_length),
         hop_length=int(self.hps.dataset.hop_length), win_length=int(self.hps.dataset.win_length),
         window=self.hps.dataset.window,power=float(self.hps.dataset.power))
+        """
         audio=torch.Tensor(audio)
         return audio
 
     def get_lang(self,lang):
         lang=lt.l2num(lang)
-        lang=torch.IntTensor(lang)
+        lang=torch.tensor(lang)
         return lang
     
     def __getitem__(self,index):
@@ -65,17 +69,17 @@ class MelLangCollate():
         Batch :[audio(n_mels,frames),text[label]]
         """
         n_mels=batch[0][0].size(0)
-        max_target_len=max([x[1].size(1) for x in batch])
+        max_target_len=max([x[0].size(1) for x in batch])
         if max_target_len %self.n_frames_per_step!=0:
             assert max_target_len%self.n_frames_per_step==0
         #mel_padding
         mel_padded=torch.FloatTensor(len(batch),n_mels,max_target_len)
-        mel_padded.zero()
+        mel_padded.zero_()
 
         #label tensor set
         label=torch.IntTensor(len(batch))
 
-        for i in range(batch.size(0)):
+        for i in range(len(batch[0])):
             mel=batch[i][0]
             mel_padded[i,:,:mel.size(1)]=mel
             label[i]=batch[i][1]
