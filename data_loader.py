@@ -1,41 +1,44 @@
 import random
 import torch
-import liborsa
+import librosa
 from librosa import stft, istft
-import librosa.feature.melspectrogram as melspectorgram
+from librosa.feature import melspectrogram as melspectorgram
 import numpy as np
-import torch.util.data
+import torch.utils.data
 import util
 import lang_type as lt
+from scipy.io import wavfile
 
 
 class MelLangLoader(torch.utils.data.Dataset):
     def __init__(self,audiopath_and_lang,hparams):
         self.hps=hparams
         self.audio_lang_list=util.get_text_loader(audiopath_and_lang)
-        self.sampling_rate=hparams.dataset.sampling_rate
-        self.max_wav_value=hparams.dataset.max_wav_value
+        self.sampling_rate=int(hparams.dataset.sampling_rate)
+        self.max_wav_value=float(hparams.dataset.max_wav_value)
 
         random.seed(1234)
-        random.shuffile(self.audio_lang_list)
+        random.shuffle(self.audio_lang_list)
 
     def get_mel_lang_pair(self,audio_lang_list):
+        audio_lang_list=audio_lang_list.split('|')
         audio,text=audio_lang_list[0],audio_lang_list[2]
+        print(audio, text)
         audio=self.get_mel(audio)
         text=self.get_text(text)
         return (audio,text)
 
     def get_mel(self,audio_path):
-        audio,sr=librosa.load(audio_path)
+        sr,audio=wavfile.read(audio_path)
         if sr != self.sampling_rate:
             raise ValueError("{} {} SR doesn`t match target {} SR".format(sr,self.sampling_rate,audio_path))
-        audio_norm=audio/self.max_wav_value
-        audio= stft(audio,n_fft=self.hps.dataset.filter_length,
-        hop_length=self.hps.dataset.hop_length, win_length=self.hps.dataset.win_length,
+        audio=audio/self.max_wav_value
+        audio= stft(audio,n_fft=int(self.hps.dataset.filter_length),
+        hop_length=int(self.hps.dataset.hop_length), win_length=int(self.hps.dataset.win_length),
         window=self.hps.dataset.window)
-        audio=melspectorgram(audio, sr=sr,n_fft=self.hps.dataset.filter_length,
-        hop_length=self.hps.dataset.hop_length, win_length=self.hps.dataset.win_length,
-        window=self.hps.dataset.window,power=self.hps.dataset.power_)
+        audio=melspectorgram(audio, sr=sr,n_fft=int(self.hps.dataset.filter_length),
+        hop_length=int(self.hps.dataset.hop_length), win_length=int(self.hps.dataset.win_length),
+        window=self.hps.dataset.window,power=float(self.hps.dataset.power))
         audio=torch.Tensor(audio)
         return audio
 
@@ -44,7 +47,7 @@ class MelLangLoader(torch.utils.data.Dataset):
         lang=torch.IntTensor(lang)
         return lang
     
-    def __getitem(self,index):
+    def __getitem__(self,index):
         return self.get_mel_lang_pair(self.audio_lang_list[index])
     
     def __len__(self):
