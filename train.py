@@ -10,7 +10,7 @@ from torch.utils.tensorboard import SummaryWriter
 import torch.distributed as dist
 from torch.nn.parallel import DistributedDataParallel
 
-from util import get_hps, get_wav, get_text_loader, log_scaler, log_model
+from util import get_hps, get_wav, get_text_loader, log_scalar, log_model, logger_start
 from Conformer import Conformer
 from data_loader import MelLangCollate, MelLangLoader
 
@@ -27,6 +27,8 @@ def main():
     hps.n_gpus = torch.cuda.device_count()
   
     hps.batch_size=int(float(hps.train.batch_size)/float(hps.n_gpus))
+
+
     if hps.n_gpus>1:
         mp.spawn(train_and_eval,nprocs=hps.n_gpus,args=(hps.n_gpus,hps, ))
     else:   
@@ -35,14 +37,16 @@ def main():
 def train_and_eval(rank, n_gpus, hps):
     global global_step
 
+    #tensorboard setting
+    writer=logger_start(hps)
+
     if hps.n_gpus>1:
         os.environ["MASTER_ADDR"]="localhost"
         os.environ["MASTER_PORT"]="12355"
         dist.init_process_group(backend='nccl',init_method='env://',world_size=n_gpus,rank=rank)
     
     device=torch.device("cuda:{:d}".format(rank))
-    print(device)
-    collate_fn=MelLangCollate()
+    collate_fn=MelLangCollate(n_class=int(hps.model.n_class))
     train_data=MelLangLoader(hps.dataset.training_data, hps)
     validation_data=MelLangLoader(hps.dataset.validation_data, hps)
 
@@ -71,34 +75,66 @@ def train_and_eval(rank, n_gpus, hps):
     global_step=0
 
     for epoch in range(epoch_str, int(hps.train.epochs)):
-        train(rank, device, epoch, hps, model, train_loader,optimizer)
-        evaluate(rank, device,  epoch, hps, model, validation_loader)
+        train(rank, device, epoch, hps, model, train_loader,optimizer, writer)
+        evaluate(rank, device,  epoch, hps, model, validation_loader,optimizer,writer)
         print("one epoch Finbished")
+    writer.close()
 
 
 
-def train(rank, device, epoch, hps, model, train_loader, optimizer):
+def train(rank, device, epoch, hps, model, train_loader, optimizer,writer):
     global global_step
+    global_loss=0.0
 
+    total = 0
+    correct = 0
     criterion=nn.CrossEntropyLoss()
     model.train()
     for batch_idx, (mel_padded, label) in enumerate(train_loader):
         mel_padded=mel_padded.to(device)
         label=label.to(device)
-
+        """
+        #save model structure on tensorboard
+        if global_step ==1 and rank == 0 :
+            log_model(writer, model, mel_padded[0])
+        """
         optimizer.zero_grad()
         output=model(mel_padded)
-        loss=criterion(output,label)
+        
+        loss=criterion(label,output)
         loss.backward()
         optimizer.step()
+        global_loss += float(loss.item())
+
+        #calculate accuracy
+        output, _= torch.max(output,1)
+        label_=torch.max(label,1)
+        pred_=torch.max(output,1)
+        print(label_)
+        print(pred_)
+        total +=1
+        correct += (label_==pred_).sum().item()
+
+        #log tensorboard
+        if global_step % int(hps.train.log_step) ==0 and rank == 0 :
+            log_scalar(writer,'train/loss',global_step,loss)
+            log_scalar(writer,'train/global_loss',global_step,global_loss/100)
+            log_scalar(writer,'train/accuracy',global_step, correct/total )
+            global_loss=0.0
+            print("Steps >> {} train loss : {} ".format(global_step, float(loss.item())))
+            total = 0
+            correct = 0
 
         global_step += 1
 
+    writer.flush()
 
 
-def evaluate(rank, device, epoch,hps, model, validation_loader, optimizer):
+
+def evaluate(rank, device, epoch, hps, model, validation_loader, optimizer, writer):
     global global_step
-    
+    global_loss=0.0
+
     criterion=nn.CrossEntropyLoss()
     model.eval()
     with torch.no_grad():
@@ -107,7 +143,15 @@ def evaluate(rank, device, epoch,hps, model, validation_loader, optimizer):
             label=label.to(device)
 
             output=model(mel_padded)
-            loss=criterion(output,label)
+            loss=criterion(label,output)
+            global_loss+=float(loss.item())
+
+             #log tensorboard
+            if global_step % int(hps.train.log_step) ==0 :
+                log_scalar(writer,'eval/loss',global_step,loss)
+                log_scalar(writer,'eval/global_loss',global_step,global_loss/100)
+                global_loss=0.0
+                print("Steps >> {} eval loss : {} ".format(global_step, float(loss.item())))
 
             global_step += 1
 
@@ -115,4 +159,7 @@ def evaluate(rank, device, epoch,hps, model, validation_loader, optimizer):
 
 if  __name__=="__main__":
     warnings.simplefilter(action="ignore",category=FutureWarning)
+
+    import sys
+
     main()

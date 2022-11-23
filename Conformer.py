@@ -180,5 +180,8 @@ class Conformer(nn.Module):
         x=self.dropout(x)
         x=self.conformer_block(x)
         x=self.FClayer(x)
-        x= nn.functional.log_softmax(x, dim = -1)
+        x=torch.permute(x,(0,2,1))
+        print(x.size())
+        x= nn.functional.log_softmax(x, dim = 1)
+        print(x.size())
         return x

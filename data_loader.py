@@ -1,5 +1,6 @@
 import random
 import torch
+from torch.nn import functional as F
 import librosa
 from librosa import stft, istft
 from librosa.feature import melspectrogram
@@ -49,6 +50,7 @@ class MelLangLoader(torch.utils.data.Dataset):
     def get_lang(self,lang):
         lang=lt.l2num(lang)
         lang=torch.tensor(lang)
+        lang= F.one_hot(lang, num_classes=int(self.hps.model.n_class))
         return lang
     
     def __getitem__(self,index):
@@ -59,8 +61,9 @@ class MelLangLoader(torch.utils.data.Dataset):
 
 
 class MelLangCollate():
-    def __init__(self,n_frames_per_step=1):
+    def __init__(self,n_class, n_frames_per_step=1 ):
         self.n_frames_per_step=n_frames_per_step
+        self.n_class=n_class
 
     def __call__(self, batch):
         """
@@ -77,11 +80,11 @@ class MelLangCollate():
         mel_padded.zero_()
 
         #label tensor set
-        label=torch.IntTensor(len(batch))
+        label=torch.zeros(len(batch),self.n_class)
 
         for i in range(len(batch[0])):
             mel=batch[i][0]
             mel_padded[i,:,:mel.size(1)]=mel
             label[i]=batch[i][1]
-
+        label=label.to(torch.long)
         return mel_padded, label

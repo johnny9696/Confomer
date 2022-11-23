@@ -3,6 +3,8 @@ import numpy
 import sys
 import os
 import json
+from torch.utils.tensorboard import SummaryWriter
+import torch
 
 
 def get_text_loader(text_path):
@@ -36,11 +38,19 @@ def get_hps(config_path):
 
     return hparams
 
-def log_scaler(writer,name, step, loss):
-    writer.add_scaler(name, loss, step)
+def logger_start(hps):
+  comment=hps.train.log_name+"_lr_"+hps.train.learning_rate+"_batch_size_"+hps.train.batch_size
+  writer=SummaryWriter(log_dir=hps.train.log_path,comment=comment)
+  return writer
+
+def log_scalar(writer,name, step, loss):
+    writer.add_scalar(name, loss, step)
 
 def log_model(writer, audio, model):
     writer.add_graph(model, audio)
+
+
+  
 
 
 
