@@ -1,41 +1,43 @@
 {
     "train" :{
         "log_name": "language_classification",
-        "epochs":"10",
-        "learning_rate" : "1e-4",
-        "max_lr" : " 1e-3",
+        "warmup_step" : 4000,
+        "epochs":1000,
+        "learning_rate" : 1,
+        "scheduler": "noam",
+        "max_lr" : 1e-5,
         "log_path": "/media/caijb/data_drive/conformer/log",
-        "log_step" : "100",
-        "batch_size" : "2",
-        "beta1" : "0.9",
-        "beta2" : "0.999",
-        "eps" : "1e-8"
+        "log_step" : 50,
+        "batch_size" : 32,
+        "beta1" : 0.9,
+        "beta2" : 0.98,
+        "eps" : 1e-9
 
     },
     "dataset": 
     {
         "training_data": "/media/caijb/data_drive/data/cross_train_min.txt",
         "validation_data": "/media/caijb/data_drive/data/cross_test_min.txt",
-        "max_wav_value" : "32768.0",
-        "sampling_rate" : "22050",
-        "filter_length" : "1024",
-        "n_mels" : "80",
-        "hop_length" : "256",
-        "win_length" : "1024",
+        "max_wav_value" : 32768.0,
+        "sampling_rate" : 22050,
+        "filter_length" : 1024,
+        "n_mels" : 80,
+        "hop_length" : 256,
+        "win_length" : 1024,
         "window" : "hann",
-        "power": "2.0",
-        "f_min" :"0",
-        "f_max":"8000"
+        "power": 2.0,
+        "f_min" :0.0,
+        "f_max":8000.0
     },
     "model" :
     {   
-        "n_class" : "5",
-        "encoder_dim" : "256" ,
-        "expantion_factor" : "2",
-        "kernel_size" : "3" ,
-        "num_attention_head" : "256" ,
-        "dropout_p" : "0.4",
-        "n_Conf_block" : "6"
+        "n_class" : 5,
+        "encoder_dim" : 256 ,
+        "expantion_factor" : 2,
+        "kernel_size" : 3 ,
+        "num_attention_head" : 8 ,
+        "dropout_p" : 0.1,
+        "n_Conf_block" : 6
         
     }
 }

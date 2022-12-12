@@ -38,9 +38,18 @@ def get_hps(config_path):
 
     return hparams
 
+def label2length_label(label, output_length, hps):
+  result=[]
+  for i in range(0,int(hps.train.batch_size)):
+    temp=[label[i] for x in range(0,output_length)]
+    result.append(temp)
+  return torch.tensor(result)
+
+
 def logger_start(hps):
-  comment=hps.train.log_name+"_lr_"+hps.train.learning_rate+"_batch_size_"+hps.train.batch_size
-  writer=SummaryWriter(log_dir=hps.train.log_path,comment=comment)
+  comment=hps.train.log_name+"_lr_"+str(hps.train.learning_rate)+"_batch_size_"+str(hps.train.batch_size)
+  log_path = os.path.join(hps.train.log_path,comment)
+  writer=SummaryWriter(log_dir=log_path)
   return writer
 
 def log_scalar(writer,name, step, loss):
@@ -51,9 +60,6 @@ def log_model(writer, audio, model):
 
 
   
-
-
-
 class Hparams():
   def __init__(self, **kwargs):
     for k, v in kwargs.items():

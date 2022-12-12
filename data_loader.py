@@ -27,7 +27,7 @@ class MelLangLoader(torch.utils.data.Dataset):
         audio,text=audio_lang_list[0],audio_lang_list[2]
         audio=self.get_mel(audio)
         text=self.get_lang(text)
-        return (audio,text)
+        return (audio, text)
 
     def get_mel(self,audio_path):
         sr,audio=wavfile.read(audio_path)
@@ -39,18 +39,13 @@ class MelLangLoader(torch.utils.data.Dataset):
         window=self.hps.dataset.window)
         mel_filter=mel(sr=sr,n_fft=int(self.hps.dataset.filter_length), fmin=float(self.hps.dataset.f_min),fmax=float(self.hps.dataset.f_max), n_mels=int(self.hps.dataset.n_mels))
         audio=mel_filter.dot(audio)
-        """
-        audio=melspectorgram(audio, sr=sr,n_fft=int(self.hps.dataset.filter_length),
-        hop_length=int(self.hps.dataset.hop_length), win_length=int(self.hps.dataset.win_length),
-        window=self.hps.dataset.window,power=float(self.hps.dataset.power))
-        """
-        audio=torch.Tensor(audio)
+        audio=torch.tensor(audio)
         return audio
 
     def get_lang(self,lang):
         lang=lt.l2num(lang)
         lang=torch.tensor(lang)
-        lang= F.one_hot(lang, num_classes=int(self.hps.model.n_class))
+        #lang= F.one_hot(lang, num_classes=int(self.hps.model.n_class))
         return lang
     
     def __getitem__(self,index):
@@ -72,19 +67,26 @@ class MelLangCollate():
         Batch :[audio(n_mels,frames),text[label]]
         """
         n_mels=batch[0][0].size(0)
-        max_target_len=max([x[0].size(1) for x in batch])
+        input_length=[x[0].size(1) for x in batch]
+        max_target_len=max(input_length)
+        input_length=torch.LongTensor(input_length)
+
         if max_target_len %self.n_frames_per_step!=0:
             assert max_target_len%self.n_frames_per_step==0
         #mel_padding
         mel_padded=torch.FloatTensor(len(batch),n_mels,max_target_len)
         mel_padded.zero_()
 
-        #label tensor set
-        label=torch.zeros(len(batch),self.n_class)
 
-        for i in range(len(batch[0])):
+        #label tensor set
+        label=torch.zeros(len(batch))
+        target_length=torch.LongTensor(len(batch))
+        target_length.zero_()
+
+        for i in range(0,len(batch)):
             mel=batch[i][0]
             mel_padded[i,:,:mel.size(1)]=mel
             label[i]=batch[i][1]
+            target_length[i]=torch.tensor(1, dtype=torch.long)
         label=label.to(torch.long)
-        return mel_padded, label
+        return mel_padded, input_length,  label, target_length

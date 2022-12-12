@@ -102,7 +102,7 @@ class convolution_subsampling(nn.Module):
             nn.Conv2d(out_channels,out_channels,kernel_size=3,stride=2),
             nn.ReLU()
         )
-    def forward(self,x):
+    def forward(self,x, input_length):
         """
         Input : Mel Spectrogram Shape [batch, n_Mels, Frames]
         After Unsqueeze(1) [batch, 1 , n_Mels , Frames]
@@ -110,12 +110,15 @@ class convolution_subsampling(nn.Module):
         To Use Linear Function Need to change to 2D
         [batch, out_channels*t,h] -> Transpose [batch,h,out_channels*t]
         t=((((n_mels-3)//2+1)-3)//2)+1
+        input_length is [n_frames, ....]
         """
         output = self.sequential(x.unsqueeze(1))
-        batch,channels,length,height=output.size()
+        batch,channels,length,height=output.size()  
         output=output.contiguous().view(batch,channels*length,height)
         output=output.permute(0,2,1)
-        return output
+        output_length=input_length>>2
+        output_length -= 1
+        return output, output_length
 
 class Conformer_block(nn.Module):
     def __init__(self,
@@ -173,15 +176,12 @@ class Conformer(nn.Module):
         self.conformer_block = nn.Sequential(*conformer_block)
         self.FClayer = nn.Linear(encoder_dim, n_class, bias = False)
     
-    def forward(self,x):
+    def forward(self,x, input_length):
         #input x [b,n_mels,frames]
-        x=self.Conv_sub(x)
+        x, output_length = self.Conv_sub(x,input_length)
         x=self.Linear(x)
         x=self.dropout(x)
         x=self.conformer_block(x)
         x=self.FClayer(x)
-        x=torch.permute(x,(0,2,1))
-        print(x.size())
-        x= nn.functional.log_softmax(x, dim = 1)
-        print(x.size())
-        return x
+        x= nn.functional.log_softmax(x, dim = -1)
+        return x, output_length
