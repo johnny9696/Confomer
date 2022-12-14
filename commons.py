@@ -9,7 +9,7 @@ class Adam():
     warmup_step=4000, amsgrad=False, foreach=None, capturable=False, fused=False, maximize=False):
         
         self.lr=lr
-        self.step=1
+        self.step_=1
         self.warmup_step=warmup_step
         self.d_model=d_model
         self.scheduler=scheduler
@@ -18,13 +18,13 @@ class Adam():
         self.optim=optim.Adam(params, lr=1e-3, betas=betas, eps=eps, weight_decay=weight_decay,amsgrad=amsgrad, foreach=foreach, capturable=capturable,maximize=maximize)
 
     def cal_lr(self):
-        lr=1
+        lr=1.0
         if self.scheduler=='noam':
-            lr=self.d_model**(-0.5)*min(self.step**(-0.5),self.step*(self.warmup_step**(-1.5)))
+            lr=self.d_model**(-0.5)*min(self.step_**(-0.5),self.step_*(self.warmup_step**(-1.5)))
         return lr
 
     def update_learning_rate(self):
-        self.step +=1
+        self.step_ +=1
         if self.scheduler=='noam':
             self.cur_lr= self.lr * self.cal_lr()
 
@@ -42,7 +42,7 @@ class Adam():
 
     def step(self):
         self.optim.step()
-        self.update_learning_rate()
+        #self.update_learning_rate()
 
     def zero_grad(self):
         self.optim.zero_grad()

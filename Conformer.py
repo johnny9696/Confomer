@@ -37,7 +37,7 @@ class Convolution_module(nn.Module):
         self.Layer_norm=nn.LayerNorm(input_channnel)
         self.P_conv1=nn.Conv1d(in_channels=input_channnel,out_channels=output_channel*expansion_factor,kernel_size=1,stride=stride,padding=padding,bias=True)
         self.P_conv2=nn.Conv1d(in_channels=input_channnel,out_channels=output_channel,kernel_size=1,stride=stride,padding=padding,bias=True)
-        self.D_conv=nn.Conv1d(in_channels=output_channel,out_channels=output_channel,kernel_size=kernel_size,groups=input_channnel,stride=stride,padding=(kernel_size-1)//2,bias=False)
+        self.D_conv=nn.Conv1d(in_channels=output_channel,out_channels=output_channel,kernel_size=kernel_size,groups=input_channnel,stride=stride,padding=(kernel_size-1)//2,bias=True)
         self.batch_norm=nn.BatchNorm1d(input_channnel)
         self.GLU=GLU(dim=1)
         self.swish=Swish()
@@ -109,7 +109,7 @@ class convolution_subsampling(nn.Module):
         After SubSampling [batch, out_channels , t , h ]
         To Use Linear Function Need to change to 2D
         [batch, out_channels*t,h] -> Transpose [batch,h,out_channels*t]
-        t=((((n_mels-3)//2+1)-3)//2)+1
+        t=((((frames-3)//2+1)-3)//2)+1
         input_length is [n_frames, ....]
         """
         output = self.sequential(x.unsqueeze(1))
@@ -154,6 +154,19 @@ class Conformer_block(nn.Module):
         x=self.Layernorm(x)
         return x
 
+
+class Single_LSTM_Decoder(nn.Module):
+    def __init__(self,
+    input_size,
+    hidden_size,
+    num_layers=2,
+    bias=True
+    ):
+        super(Single_LSTM_Decoder,self).__init__()
+        self.LSTM=nn.LSTM(input_size=input_size, hidden_size=hidden_size, num_layers=num_layers,bias=bias, batch_first=True)
+    def forward(self,x):
+        return self.LSTM(x)
+
 class Conformer(nn.Module):
     def __init__(self,
     n_mels,
@@ -174,7 +187,8 @@ class Conformer(nn.Module):
         for i in range(n_Conf_block):
             conformer_block.append(self.block)
         self.conformer_block = nn.Sequential(*conformer_block)
-        self.FClayer = nn.Linear(encoder_dim, n_class, bias = False)
+        self.single_LSTM=Single_LSTM_Decoder(input_size=encoder_dim,hidden_size=n_class)
+        #self.FClayer = nn.Linear(encoder_dim, n_class, bias = False)
     
     def forward(self,x, input_length):
         #input x [b,n_mels,frames]
@@ -182,6 +196,7 @@ class Conformer(nn.Module):
         x=self.Linear(x)
         x=self.dropout(x)
         x=self.conformer_block(x)
-        x=self.FClayer(x)
+        x,_=self.single_LSTM(x)
+        #x=self.FClayer(x)
         x= nn.functional.log_softmax(x, dim = -1)
         return x, output_length
