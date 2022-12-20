@@ -6,7 +6,7 @@ _num='0123456789'
 _symbol=".,;:!?'`\" "
 _special="_^&/-"
 
-symbols=['<BNK>']+list(_alphabet)+list(_symbol)+list(_special)
+symbols=['<BNK>']+list(_alphabet)
 
 def text2vec(text):
     result=[]

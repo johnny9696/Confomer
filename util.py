@@ -1,10 +1,11 @@
 import librosa
-import numpy
+import numpy as np
 import sys
 import os
 import json
 from torch.utils.tensorboard import SummaryWriter
 import torch
+import matplotlib.pylab as plt
 
 
 def get_text_loader(text_path):
@@ -15,6 +16,7 @@ def get_text_loader(text_path):
 def get_wav(audio_path):
     wav,sr=librosa.load(audio_path)
     return wav, sr
+
 
 def get_hps(config_path):
     if config_path==None:
@@ -45,6 +47,41 @@ def label2length_label(label, output_length, hps):
     result.append(temp)
   return torch.tensor(result)
 
+def RGBA2RGB(RGBA):
+  row,col,ch =RGBA.shape
+  if ch ==3:
+    return RGBA
+  assert ch==4
+
+  rgb=np.zeros((row,col,3),dtype='float32')
+  r,g,b,a=RGBA[:,:,0],RGBA[:,:,1],RGBA[:,:,2],RGBA[:,:,3]
+  a= np.asarray(a,dtype='float32')/255.0
+  R,G,B=(255,255,255)
+
+  rgb[:,:,0]=r*a+(1.0-a)*R
+  rgb[:,:,1]=g*a+(1.0-a)*G
+  rgb[:,:,2]=b*a+(1.0-a)*B
+
+  return np.asarray(rgb, dtype='uint8')
+
+
+def plot_atten_to_numpy(label, target, atten):
+  fig, ax = plt.subplots(figsize=(6, 4))
+  im = ax.imshow(atten, aspect='auto', origin='lower',
+                  interpolation='none')
+  fig.colorbar(im, ax=ax)
+  
+  xlabel = 'Decoder timestep'
+  plt.xlabel(xlabel)
+  plt.ylabel('Encoder timestep')
+  plt.tight_layout()
+  fig.canvas.draw()
+  data=np.array(fig.canvas.renderer._renderer)
+  #print(data.shape)
+  #data=RGBA2RGB(data)
+  plt.close()
+  return data
+
 
 def logger_start(hps):
   comment=hps.train.log_name+"_lr_"+str(hps.train.learning_rate)+"_batch_size_"+str(hps.train.batch_size)
@@ -53,12 +90,13 @@ def logger_start(hps):
   return writer
 
 def log_scalar(writer,name, step, loss):
-    writer.add_scalar(name, loss, step)
+  writer.add_scalar(name, loss, step)
 
 def log_model(writer, audio, model):
-    writer.add_graph(model, audio)
+  writer.add_graph(model, audio)
 
-
+def log_atten(writer, name, step, image):
+  writer.add_image(name, image, step,dataformats='HWC')
   
 class Hparams():
   def __init__(self, **kwargs):

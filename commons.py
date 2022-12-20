@@ -42,7 +42,7 @@ class Adam():
 
     def step(self):
         self.optim.step()
-        #self.update_learning_rate()
+        self.update_learning_rate()
 
     def zero_grad(self):
         self.optim.zero_grad()

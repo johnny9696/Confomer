@@ -10,7 +10,7 @@ from torch.utils.tensorboard import SummaryWriter
 import torch.distributed as dist
 from torch.nn.parallel import DistributedDataParallel
 
-from util import get_hps, get_wav, get_text_loader, log_scalar, log_model, logger_start, label2length_label
+from util import get_hps, get_wav, get_text_loader, log_scalar, log_model,log_atten, logger_start, plot_atten_to_numpy
 from symbols import symbols, vec2text
 from Conformer import Conformer
 from data_loader import MelTextCollate, MelTextLoader
@@ -79,9 +79,6 @@ def train_and_eval(rank, n_gpus, hps):
     betas=(hps.train.beta1, hps.train.beta2), eps=hps.train.eps, weight_decay=0, amsgrad=False, foreach=None, 
     maximize=False, capturable=False,scheduler=hps.train.scheduler) 
 
-    
-
-
     epoch_str=1
     global_step=0
 
@@ -106,23 +103,17 @@ def train(rank, device, epoch, hps, model, train_loader, optimizer,writer):
         label=label.to(device)
         target_length=target_length.to(device)
         input_length=input_length.to(device)
-        """
-        #save model structure on tensorboard
-        if global_step ==1 and rank == 0 :
-            log_model(writer, model, mel_padded[0])
-        """
-        #print(mel_padded,label,input_length,target_length)
         optimizer.zero_grad()
         output,output_length=model(mel_padded, input_length)
         batch, seq_length, on_class=output.size()
+        atten=output[0].detach().cpu()
         output=output.view((seq_length,batch,on_class))
-        print(label.size(), output.size())
         loss=criterion(output, label, output_length, target_length)
         loss.backward()
         optimizer.step()
         global_loss += float(loss.item())
         #calculate accuracy
-        _, output= torch.max(output,2)
+        _, output= torch.max(output.transpose(1,0),2)
         #label_=label2length_label(label, output.size(1), hps).to(device)    
         #log tensorboard
         if batch_idx % int(hps.train.log_step) ==0 and rank == 0 :
@@ -132,8 +123,8 @@ def train(rank, device, epoch, hps, model, train_loader, optimizer,writer):
             _output=_output.tolist()
             t_label=vec2text(_label[0])
             t_output=vec2text(_output[0])
-            print(_label[0],':',"t",t_label)
-            print(_output[0],':',t_output)
+            image=plot_atten_to_numpy(label=t_label,target=t_output,atten=atten)
+            log_atten(writer, "Train/Attention",global_step, image)
             log_scalar(writer,'train/loss',global_step,loss)
             log_scalar(writer,'train/global_loss',global_step,global_loss/100)
             #log_scalar(writer,'train/accuracy',global_step, correct/total )
@@ -152,9 +143,9 @@ def evaluate(rank, device, epoch, hps, model, validation_loader, optimizer, writ
     global global_step
     global_loss=0.0
 
-    criterion=nn.CTCLoss().to(device)
+    criterion=nn.CTCLoss(zero_infinity=True).to(device)
     model.eval()
-    
+    torch.autograd.set_detect_anomaly(True)
     for batch_idx, (mel_padded, input_length, label, target_length) in enumerate(validation_loader):
         mel_padded=mel_padded.to(device)
         label=label.to(device)
@@ -165,32 +156,32 @@ def evaluate(rank, device, epoch, hps, model, validation_loader, optimizer, writ
         if global_step ==1 and rank == 0 :
             log_model(writer, model, mel_padded[0])
         """
+        #print(mel_padded,label,input_length,target_length)
         optimizer.zero_grad()
         output,output_length=model(mel_padded, input_length)
-        loss=criterion(output.transpose(1,0), label, output_length, target_length)
-        optimizer.step()
+        batch, seq_length, on_class=output.size()
+        atten=output.detach().cpu()
+        output=output.view((seq_length,batch,on_class))
+        loss=criterion(output, label, output_length, target_length)
         global_loss += float(loss.item())
         #calculate accuracy
-        _, output= torch.max(output,2)
-        #label_=label2length_label(label, output.size(1), hps).to(device)
-    
-        #total += output.size(1)
-        #correct += (label_==output).sum().item()
-
+        _, output= torch.max(output.transpose(1,0),2)
+        #label_=label2length_label(label, output.size(1), hps).to(device)    
         #log tensorboard
-        if batch_idx % int(hps.train.log_step) ==0 :
+        if batch_idx % int(hps.train.log_step) ==0 and rank == 0 :
             _label=label.detach().cpu()
             _output=output.detach().cpu()
             _label=_label.tolist()
             _output=_output.tolist()
             t_label=vec2text(_label[0])
             t_output=vec2text(_output[0])
-            print(t_label, t_output)
-            log_scalar(writer,'eval/loss',global_step,loss)
-            log_scalar(writer,'eval/global_loss',global_step,global_loss/100)
-            #log_scalar(writer,'eval/accuracy',global_step, correct/total )
+            image=plot_atten_to_numpy(label=t_label,target=t_output,atten=atten[0])
+            log_atten(writer, "Eval/Attention",global_step, image)
+            log_scalar(writer,'Eval/loss',global_step,loss)
+            log_scalar(writer,'Eval/global_loss',global_step,global_loss/100)
+            #log_scalar(writer,'train/accuracy',global_step, correct/total )
             global_loss=0.0
-            print("Steps >> {} validation loss : {} ".format(global_step, float(loss.item())))
+            print("Steps >> {} Eval loss : {} ".format(global_step, float(loss.item())))
 
         global_step += 1
 
@@ -200,6 +191,7 @@ def evaluate(rank, device, epoch, hps, model, validation_loader, optimizer, writ
 
 if  __name__=="__main__":
     warnings.simplefilter(action="ignore",category=FutureWarning)
+    warnings.simplefilter(action="ignore",category=UserWarning)
 
     import sys
 

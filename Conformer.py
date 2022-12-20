@@ -159,7 +159,7 @@ class Single_LSTM_Decoder(nn.Module):
     def __init__(self,
     input_size,
     hidden_size,
-    num_layers=2,
+    num_layers=3,
     bias=True
     ):
         super(Single_LSTM_Decoder,self).__init__()
@@ -198,5 +198,5 @@ class Conformer(nn.Module):
         x=self.conformer_block(x)
         x,_=self.single_LSTM(x)
         #x=self.FClayer(x)
-        x= nn.functional.log_softmax(x, dim = -1)
+        x= nn.functional.log_softmax(x, dim = 2)
         return x, output_length
